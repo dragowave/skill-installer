@@ -19,7 +19,7 @@ from msm import SkillNotFound, SkillRequirementsException, \
     GitException, AlreadyRemoved, AlreadyInstalled, MsmException, SkillEntry, \
     MultipleSkillMatches, MycroftSkillsManager
 from mycroft import intent_file_handler, MycroftSkill
-
+from mycroft.api import DeviceApi
 try:
     from mycroft.skills.skill_manager import SkillManager
 except ImportError:
@@ -172,6 +172,47 @@ class SkillInstallerSkill(MycroftSkill):
         except StopIteration:
             self.speak_dialog('cancelled')
 
+    def __filter_by_uuid(self, skills):
+        """ Return only skills intended for this device.
+
+        Keeps entrys where the devices field is None of contains the uuid
+        of the current device.
+
+        Arguments:
+            skills: skill list from to_install or to_remove
+
+        Returns:
+            filtered list
+        """
+        uuid = DeviceApi().get()['uuid']
+        return [s for s in skills if not s['devices'] or uuid in s['devices']]
+
+    def __marketplace_install(self, install_list):
+        install_list = self.__filter_by_uuid(install_list)
+        # Split skill name from author
+        skills = [s['name'].split('.')[0] for s in install_list]
+
+        self.log.info('Will install {} from the marketplace'.format(skills))
+        # Remove already installed skills from skills to install
+        installed_skills = [s.name for s in self.msm.list() if s.is_local]
+        skills = [s for s in skills if s not in installed_skills]
+
+        self.log.info('Will install {} from the marketplace'.format(skills))
+        result = self.msm.apply(self.msm.install, skills)
+
+    def __marketplace_remove(self, remove_list):
+        remove_list = self.__filter_by_uuid(remove_list)
+        # Split skill name from author
+        skills = [skill['name'].split('.')[0] for skill in remove_list]
+        self.log.info('Will remove {} from the marketplace'.format(skills))
+        # Remove not installed skills from skills to remove
+        installed_skills = [s.name for s in self.msm.list() if s.is_local]
+        self.log.info(installed_skills)
+        skills = [s for s in skills if s in installed_skills]
+        self.log.info('Will remove {} from the marketplace'.format(skills))
+
+        result = self.msm.apply(self.msm.remove, skills)
+
     def on_web_settings_change(self):
         self.log.info('Installer Skill web settings have changed')
         s = self.settings
@@ -186,6 +227,9 @@ class SkillInstallerSkill(MycroftSkill):
             name = SkillEntry.extract_repo_name(link)
             with self.handle_msm_errors(name, action):
                 self.msm.install(link)
+
+        self.__marketplace_remove(s.get('to_remove', []))
+        self.__marketplace_install(s.get('to_install', []))
 
     def confirm_skill_action(self, skill, confirm_dialog):
         response = self.get_response(
