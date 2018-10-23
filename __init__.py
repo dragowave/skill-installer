@@ -278,7 +278,11 @@ class SkillInstallerSkill(MycroftSkill):
 
     def upload_skills_data(self, skills_data):
         if self.config_core['skills'].get('upload_skill_manifest', False):
-            DeviceApi().upload_skills_data(skills_data)
+            try:
+                DeviceApi().upload_skills_data(skills_data)
+            except Exception as e:
+                self.log.error('An exception occured while uploading the '
+                               ' skills manifest ({})'.format(repr(e)))
 
     def stop(self):
         pass
