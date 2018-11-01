@@ -190,22 +190,13 @@ class SkillInstallerSkill(MycroftSkill):
         to_remove = s.get('to_remove', [])
         skills_data = SkillManager.load_skills_data()
         self.log.info('to_install: {}'.format(to_install))
-        installed, failed = self.__marketplace_install(to_install)
+        installed = self.__marketplace_install(to_install)
         for skill in installed:
             skill_data = skills_data.setdefault(skill, {})
             skill_data['origin'] = 'marketplace'
             skill_data['installation'] = 'installed'
             skill_data['installed'] = time.time()
-            skill_data['failure-message'] = ''
             skill_data['updated'] = 0
-        for skill in failed:
-            skill_data = skills_data.setdefault(skill, {})
-            skill_data['origin'] = 'marketplace'
-            skill_data['installation'] = 'failed'
-            skill_data['installed'] = 0
-            skill_data['failure-message'] = 'MsmException occured'
-            skill_data['updated'] = 0
-
         removed = self.__marketplace_remove(to_remove)
         for skill in removed:
             if skill in skills_data:
@@ -246,25 +237,15 @@ class SkillInstallerSkill(MycroftSkill):
 
             self.log.info('Will install {} from the marketplace'.format(skills))
 
-            successes = []
-            fails = []
-            def install(name):
-                s = self.msm.find_skill(name)
-                try:
-                    s.install()
-                    successes.append(name)
-                except MsmException as e:
-                    self.log.error('{} Could not be installed '
-                                   'due to {}'.format(name, repr(e)))
-                    fails.append(name)
+            def install(skill):
+                self.msm.install(skill)
 
             result = self.msm.apply(install, skills)
-            return successes, fails
-
+            return skills
         except Exception as e:
-            self.log.exception('An error occured installing from marketplace '
+            self.log.error('An error occured installing from marketplace '
                            '({}'.format(repr(e)))
-            return [], []
+            return []
 
     def __marketplace_remove(self, remove_list):
         try:
