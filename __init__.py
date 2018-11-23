@@ -199,8 +199,23 @@ class SkillInstallerSkill(MycroftSkill):
             with self.handle_msm_errors(name, action):
                 self.msm.install(link)
 
+        # Check for Marketplace updates
         to_install = s.get('to_install', [])
         to_remove = s.get('to_remove', [])
+
+        # Work around backend sending this as json string
+        if isinstance(to_install, str):
+            to_install = json.loads(to_install)
+        if isinstance(to_remove, str):
+            to_remove = json.loads(to_remove)
+
+        # If skill exists both in to_install and to_remove don't try
+        # to install it.
+        removing = [e['name'] for e in to_remove]
+        to_install = [e for e in to_install if e['name'] not in removing]
+        self.handle_marketplace(to_install, to_remove)
+
+    def handle_marketplace(self, to_install, to_remove):
         skills_data = SkillManager.load_skills_data()
         self.log.info('to_install: {}'.format(to_install))
         installed, failed = self.__marketplace_install(to_install)
@@ -244,8 +259,6 @@ class SkillInstallerSkill(MycroftSkill):
 
     def __marketplace_install(self, install_list):
         try:
-            if isinstance(install_list, str):
-                install_list = json.loads(install_list)
             install_list = self.__filter_by_uuid(install_list)
             # Split skill name from author
             skills = [s['name'].split('.')[0] for s in install_list]
@@ -281,10 +294,6 @@ class SkillInstallerSkill(MycroftSkill):
 
     def __marketplace_remove(self, remove_list):
         try:
-            # Work around backend sending this as json string
-            if isinstance(remove_list, str):
-                remove_list = json.loads(remove_list)
-
             remove_list = self.__filter_by_uuid(remove_list)
 
             # Split skill name from author
